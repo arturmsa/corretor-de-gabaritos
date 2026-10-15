@@ -1,0 +1,52 @@
+# Corretor de Gabaritos · criado pelo Prof. Artur
+# Gera o APK automaticamente no GitHub a cada envio de arquivos (ou pelo botão "Run workflow").
+# O APK fica disponível na aba "Releases" do repositório, pronto para baixar e compartilhar.
+name: Gerar APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Copiar o app para o projeto Android
+        run: npx cap sync android
+
+      - name: Compilar APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../corretor-de-gabaritos.apk
+
+      - name: Publicar na aba Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Corretor de Gabaritos 1.0.${{ github.run_number }}
+          body: |
+            APK do Corretor de Gabaritos, criado pelo Prof. Artur.
+            Baixe o arquivo corretor-de-gabaritos.apk abaixo e instale no Android.
+          files: corretor-de-gabaritos.apk
