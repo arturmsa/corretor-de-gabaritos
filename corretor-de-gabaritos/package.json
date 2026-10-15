@@ -1,0 +1,23 @@
+{
+  "name": "corretor-de-gabaritos",
+  "version": "1.0.0",
+  "description": "Corretor de Gabaritos: app Android gratuito que lê folhas de respostas pela câmera e separa os resultados por turma. Criado pelo Prof. Artur (E.E. Monsenhor Joaquim Honório, Guamaré/RN).",
+  "scripts": {
+    "sync": "npx cap sync android",
+    "teste-leitura": "node test/run.js"
+  },
+  "author": "Prof. Artur",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/camera": "^8.2.5",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/share": "^8.0.3",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "xlsx": "^0.18.5"
+  },
+  "private": true
+}

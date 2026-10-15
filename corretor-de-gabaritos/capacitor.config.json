@@ -1,0 +1,8 @@
+{
+  "appId": "br.prof.artur.corretorgabaritos",
+  "appName": "Corretor de Gabaritos",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}
