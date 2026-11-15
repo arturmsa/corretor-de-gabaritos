@@ -1,0 +1,9 @@
+# Corretor de Gabaritos · arquivos gerados pelos testes e dependências
+node_modules
+test/*.png
+test/*.jpg
+test/*.raw
+test/*.pdf
+test/*.xlsx
+test/*.json
+test/_o.js
