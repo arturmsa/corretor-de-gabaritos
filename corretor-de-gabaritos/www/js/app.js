@@ -13,7 +13,8 @@
   var L = window.GabLayout, OMR = window.GabOMR, Store = window.GabStore,
       R = window.GabReports, X = window.GabExport, Plat = window.GabPlatform;
 
-  var VERSAO_APP = '1.0.0';
+  var VERSAO_APP = '1.1.0';
+  var Mini = window.GabMini;
   var $view = document.getElementById('view');
   var $titulo = document.getElementById('titulo');
   var $voltar = document.getElementById('btnVoltar');
@@ -176,7 +177,7 @@
     };
     document.getElementById('lerOficial').onclick = function () {
       lerCampos();
-      lerFoto().then(function (res) {
+      lerFoto(d.numQ).then(function (res) {
         if (!res) return;
         var n = 0;
         for (var q = 1; q <= d.numQ; q++) {
@@ -238,7 +239,7 @@
     html += '<div class="list" style="margin-top:12px">' +
       '<a class="item" href="#/p/' + p.id + '/resultados"><div class="grow"><div class="title">Resultados por turma</div><div class="small muted">' + p.resultados.length + ' folha(s) corrigida(s)</div></div>' + CHEV + '</a>' +
       '<a class="item" href="#/p/' + p.id + '/relatorios"><div class="grow"><div class="title">Relatórios</div><div class="small muted">Média, acerto por questão, mais erradas, ranking</div></div>' + CHEV + '</a>' +
-      '<button class="item" id="imprimir"><div class="grow"><div class="title">Gerar folhas para imprimir</div><div class="small muted">PDF com o nome da escola e da prova</div></div>' + CHEV + '</button>' +
+      '<button class="item" id="imprimir"><div class="grow"><div class="title">Gerar folhas para imprimir</div><div class="small muted">Folha A4 ou mini gabarito para colar na prova</div></div>' + CHEV + '</button>' +
       '<a class="item" href="#/p/' + p.id + '/editar"><div class="grow"><div class="title">Editar gabarito e questões</div></div>' + CHEV + '</a>' +
       '</div><button class="btn danger block" id="excluir" style="margin-top:24px">Excluir prova</button>';
     $view.innerHTML = html;
@@ -262,8 +263,14 @@
     });
   }
 
+  // Formatos aceitos na leitura: a folha A4 e os dois mini gabaritos desta prova.
+  // O professor pode misturar: o app descobre sozinho qual foi fotografado.
+  function formatosDaProva(numQ) {
+    return [L, Mini.layout('mini-h', numQ), Mini.layout('mini-q', numQ)];
+  }
+
   // Tira a foto e roda a leitura. Devolve o resultado do OMR (ou null se cancelado/erro).
-  function lerFoto() {
+  function lerFoto(numQ) {
     return Plat.foto(document.getElementById('inputFoto')).then(function (dataUrl) {
       carregando(true, 'Lendo a folha…');
       return carregarImagem(dataUrl);
@@ -276,13 +283,13 @@
       var ctx = cv.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(img, 0, 0, w, h);
       var gray = OMR.toGray(ctx.getImageData(0, 0, w, h).data, w, h);
-      var res = OMR.read(gray, w, h);
+      var res = OMR.read(gray, w, h, formatosDaProva(numQ));
       if (res.ok) res.preview = desenharConferencia(cv, res);
       carregando(false);
       if (!res.ok) {
-        return dialogo('<h2>Não consegui ler</h2><p>' + esc(res.error) + '</p><p class="small muted">Dicas: folha inteira na foto, sem dobras, boa luz, celular paralelo à folha.</p>',
+        return dialogo('<h2>Não consegui ler</h2><p>' + esc(res.error) + '</p><p class="small muted">Dicas: gabarito inteiro na foto com os 4 quadrados pretos, sem dobras, boa luz, celular paralelo ao papel. No mini gabarito, chegue mais perto para ele ocupar boa parte da foto.</p>',
           [{ texto: 'Fechar', valor: 'fechar' }, { texto: 'Tentar de novo', valor: 'de-novo', cls: 'primary' }])
-          .then(function (v) { return v === 'de-novo' ? lerFoto() : null; });
+          .then(function (v) { return v === 'de-novo' ? lerFoto(numQ) : null; });
       }
       return res;
     }).catch(function (e) {
@@ -302,24 +309,28 @@
     var ctx = c2.getContext('2d');
     ctx.drawImage(cv, 0, 0, c2.width, c2.height);
     ctx.lineWidth = Math.max(2, c2.width / 300);
-    L.order.forEach(function (g) {
+    var LY = res.layout;
+    // raio do círculo de conferência: metade da distância entre duas bolinhas vizinhas na foto
+    var p0 = res.points.serie[0], p1 = res.points.serie[1];
+    var raio = Math.max(4, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) * s * 0.5);
+    LY.order.forEach(function (g) {
       var v = res.answers[g], duv = res.doubts.indexOf(g) >= 0;
-      L.groups[g].forEach(function (b, i) {
+      LY.groups[g].forEach(function (b, i) {
         var marcado = v && (v === '*' ? res.scores[g][i] >= 0.25 : v === b.value);
         if (!marcado && !duv) return;
         var pt = res.points[g][i];
         ctx.strokeStyle = duv ? '#e0a100' : '#1b9e5a';
-        ctx.beginPath(); ctx.arc(pt[0] * s, pt[1] * s, c2.width / 70, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(pt[0] * s, pt[1] * s, raio, 0, Math.PI * 2); ctx.stroke();
       });
     });
     return c2.toDataURL('image/jpeg', 0.8);
   }
 
   function escanear(p) {
-    lerFoto().then(function (res) {
+    lerFoto(p.numQ).then(function (res) {
       if (!res) return;
       var a = res.answers, respostas = [];
-      for (var q = 1; q <= L.MAX_Q; q++) respostas.push(q <= p.numQ ? a['q' + q] : null);
+      for (var q = 1; q <= L.MAX_Q; q++) respostas.push(q <= p.numQ && a['q' + q] !== undefined ? a['q' + q] : null);
       pendente = {
         provaId: p.id,
         r: {
@@ -554,19 +565,45 @@
 
   function gerarFolhas(p) {
     var escola = Store.getEscola();
-    dialogo('<h2>Folhas para imprimir</h2>' +
+    var opcoes = '<fieldset class="formatos"><legend>Formato</legend>' +
+      '<label class="radio"><input type="radio" name="fmt" value="folha" checked><span><b>Folha A4 completa</b><br><span class="small muted">Uma folha de respostas separada da prova.</span></span></label>' +
+      (p ? '<label class="radio"><input type="radio" name="fmt" value="mini-h"><span><b>Mini gabarito horizontal</b><br><span class="small muted">Faixa para colar no topo ou no fim da prova.</span></span></label>' +
+           '<label class="radio"><input type="radio" name="fmt" value="mini-q"><span><b>Mini gabarito quadrado</b><br><span class="small muted">Bloco para colar num canto da prova.</span></span></label>' : '') +
+      '</fieldset>';
+    dialogo('<h2>' + (p ? 'Gabarito para imprimir' : 'Folha em branco') + '</h2>' +
       (escola ? '' : '<div class="alert">O nome da escola ainda não foi definido (menu ⋮ › Nome da escola).</div>') +
-      '<label class="field" style="margin-top:12px">Quantidade de folhas no PDF<input id="dCopias" type="number" min="1" max="60" value="1" inputmode="numeric"></label>' +
-      '<p class="small muted">Dica: gere 1 folha e tire cópias. Imprima em <b>tamanho real (100%)</b>, sem "ajustar à página".</p>',
+      opcoes +
+      '<div id="optFolha"><label class="field" style="margin-top:12px">Quantidade de folhas no PDF<input id="dCopias" type="number" min="1" max="60" value="1" inputmode="numeric"></label>' +
+      '<p class="small muted">Dica: gere 1 folha e tire cópias. Imprima em <b>tamanho real (100%)</b>, sem "ajustar à página".</p></div>' +
+      '<div id="optMini" hidden><label class="field" style="margin-top:12px">Tipo de arquivo<select id="dTipo">' +
+      '<option value="png">Imagem (para colar no Word ou Google Docs)</option><option value="pdf">PDF (para imprimir e recortar)</option></select></label>' +
+      '<p class="small muted">Cole a imagem na prova <b>sem esticar nem achatar</b> (mantenha a proporção) e deixe um espaço branco em volta. ' +
+      'O mini gabarito é feito para esta prova (' + (p ? p.numQ : '') + ' questões); se mudar o número de questões, gere de novo.</p></div>',
       [{ texto: 'Cancelar', valor: 'x' }, { texto: 'Baixar', valor: 'baixar' }, { texto: 'Enviar', valor: 'enviar', cls: 'primary' }])
       .then(function (v) {
         if (v !== 'baixar' && v !== 'enviar') return;
-        var copias = parseInt(($dlg.querySelector('#dCopias') || {}).value, 10) || 1;
-        var arq = X.folha({ escola: escola, prova: p ? p.nome : '', numQuestoes: p ? p.numQ : L.MAX_Q, copias: copias });
-        (v === 'enviar' ? Plat.compartilhar(arq.blob, arq.nome, 'Folha de respostas') : Plat.baixar(arq.blob, arq.nome))
-          .then(function (msg) { if (typeof msg === 'string') toast(msg, 3500); })
+        var fmtEl = $dlg.querySelector('input[name="fmt"]:checked');
+        var fmt = fmtEl ? fmtEl.value : 'folha';
+        var gerar;
+        if (fmt === 'folha') {
+          var copias = parseInt(($dlg.querySelector('#dCopias') || {}).value, 10) || 1;
+          gerar = Promise.resolve(X.folha({ escola: escola, prova: p ? p.nome : '', numQuestoes: p ? p.numQ : L.MAX_Q, copias: copias }));
+        } else {
+          gerar = X.mini(p, fmt, $dlg.querySelector('#dTipo').value);
+        }
+        gerar.then(function (arq) {
+          return v === 'enviar' ? Plat.compartilhar(arq.blob, arq.nome, 'Gabarito: ' + (p ? p.nome : '')) : Plat.baixar(arq.blob, arq.nome);
+        }).then(function (msg) { if (typeof msg === 'string') toast(msg, 3500); })
           .catch(function (e) { if (!/cancel/i.test(String(e && e.message || e))) aviso('Não deu certo', String(e.message || e)); });
       });
+    // mostra só as opções do formato escolhido
+    $dlg.querySelectorAll('input[name="fmt"]').forEach(function (r) {
+      r.onchange = function () {
+        var folha = $dlg.querySelector('input[name="fmt"]:checked').value === 'folha';
+        $dlg.querySelector('#optFolha').hidden = !folha;
+        $dlg.querySelector('#optMini').hidden = folha;
+      };
+    });
   }
 
   /* =============== menu, escola, backup, sobre =============== */

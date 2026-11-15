@@ -88,7 +88,18 @@
     }
   });
 
+  // Conferências usadas pela leitura (omr.js):
+  // antiBar: lugar espelhado da barra, que precisa estar BRANCO (evita ler a folha de ponta-cabeça);
+  // barEnds: pedacinhos logo antes e depois da barra, também brancos (diferencia a folha do mini gabarito);
+  // paperRef: pontos de papel em branco usados como referência de claridade.
+  var antiBar = { x: 156, y: 10, w: 30, h: 4 };
+  var barEnds = [{ x: 19.5, y: 10, w: 3.5, h: 4 }, { x: 55, y: 10, w: 3.5, h: 4 }];
+  var paperRef = [];
+  for (var px = 58; px <= 120; px += 4) paperRef.push([px, 12]);
+
   return {
+    id: 'folha',
+    nome: 'Folha A4',
     VERSION: 2,
     PAGE: PAGE,
     BUBBLE_R: BUBBLE_R,
@@ -97,6 +108,9 @@
     MARKER: MARKER,
     markers: markers,
     orientBar: orientBar,
+    antiBar: antiBar,
+    barEnds: barEnds,
+    paperRef: paperRef,
     SERIES: SERIES, SERIES_NOME: SERIES_NOME,
     TURMAS: TURMAS,
     TURNOS: TURNOS, TURNOS_NOME: TURNOS_NOME,

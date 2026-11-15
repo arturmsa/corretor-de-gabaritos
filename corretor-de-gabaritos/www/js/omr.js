@@ -23,7 +23,8 @@
   var TH_MARK = 0.25;      // a partir daqui a bolinha conta como marcada
   var TH_DOUBT_LO = 0.15;  // entre DOUBT_LO e DOUBT_HI o app pede conferência
   var TH_DOUBT_HI = 0.32;
-  var MULT_RATIO = 0.4;    // segunda marcação forte = questão com duas respostas (anulada para o aluno)
+  var TH_DOUBLE = 0.32;    // a segunda marcação precisa ser pelo menos isto para anular a questão
+  var MULT_RATIO = 0.45;   // segunda marcação forte = questão com duas respostas (anulada para o aluno)
 
   /* ---------- utilidades de imagem ---------- */
 
@@ -161,24 +162,29 @@
     return s[s.length >> 1];
   }
 
-  // Pontos de amostra (em mm, relativos ao centro) para o miolo e para o papel ao redor
-  var INNER = [], RING = [];
-  (function () {
-    for (var dy = -1.5; dy <= 1.5001; dy += 0.375)
-      for (var dx = -1.5; dx <= 1.5001; dx += 0.375)
-        if (dx * dx + dy * dy <= 1.55 * 1.55) INNER.push([dx, dy]);
-    // papel acima e abaixo da bolinha (os vizinhos ficam dos lados)
-    [3.0, 3.3].forEach(function (r) {
+  // Pontos de amostra (em mm, relativos ao centro) para o miolo e para o papel ao redor.
+  // Calculados conforme o tamanho da bolinha (a folha A4 e o mini gabarito têm tamanhos diferentes).
+  var AMOSTRAS = {};
+  function amostras(R) {
+    if (AMOSTRAS[R]) return AMOSTRAS[R];
+    var rin = 0.645 * R, st = rin / 4, inner = [], ring = [];
+    for (var dy = -rin; dy <= rin + 1e-6; dy += st)
+      for (var dx = -rin; dx <= rin + 1e-6; dx += st)
+        if (dx * dx + dy * dy <= rin * rin * 1.07) inner.push([dx, dy]);
+    // papel acima e abaixo da bolinha
+    [1.25 * R, 1.375 * R].forEach(function (r) {
       for (var a = 60; a <= 120; a += 10) {
         var t = a * Math.PI / 180;
-        RING.push([r * Math.cos(t), r * Math.sin(t)]);
-        RING.push([r * Math.cos(t), -r * Math.sin(t)]);
+        ring.push([r * Math.cos(t), r * Math.sin(t)]);
+        ring.push([r * Math.cos(t), -r * Math.sin(t)]);
       }
     });
-  })();
+    AMOSTRAS[R] = { inner: inner, ring: ring };
+    return AMOSTRAS[R];
+  }
 
-  function bubbleScore(P, S, x, y) {
-    var inn = 0;
+  function bubbleScore(P, S, x, y, R) {
+    var A = amostras(R), INNER = A.inner, RING = A.ring, inn = 0;
     for (var i = 0; i < INNER.length; i++) { var p = P(x + INNER[i][0], y + INNER[i][1]); inn += S(p[0], p[1]); }
     inn /= INNER.length;
     var ring = [];
@@ -188,25 +194,33 @@
   }
 
   // Escuridão média de um retângulo (mm) comparada a um pedaço de papel de referência
-  function rectDarkness(P, S, r, paper) {
+  function rectDarkness(P, S, r, paperV) {
+    var ix = Math.min(0.8, r.w * 0.25), iy = Math.min(0.8, r.h * 0.25);
+    var sx = Math.max(0.3, (r.w - 2 * ix) / 8), sy = Math.max(0.3, (r.h - 2 * iy) / 4);
     var v = 0, n = 0;
-    for (var y = r.y + 0.8; y <= r.y + r.h - 0.8; y += 0.6)
-      for (var x = r.x + 0.8; x <= r.x + r.w - 0.8; x += 0.8) { var p = P(x, y); v += S(p[0], p[1]); n++; }
-    var pv = [];
-    paper.forEach(function (pt) { var q = P(pt[0], pt[1]); pv.push(S(q[0], q[1])); });
-    return 1 - (v / n) / Math.max(median(pv), 1);
+    for (var y = r.y + iy; y <= r.y + r.h - iy + 1e-6; y += sy)
+      for (var x = r.x + ix; x <= r.x + r.w - ix + 1e-6; x += sx) { var p = P(x, y); v += S(p[0], p[1]); n++; }
+    return 1 - (v / n) / Math.max(paperV, 1);
   }
 
-  // Confere se a homografia faz sentido: cantos e barra escuros, papel claro
-  function verify(P, S) {
-    var paper = [];
-    for (var x = 58; x <= 120; x += 4) paper.push([x, 12]);
-    var bar = rectDarkness(P, S, L.orientBar, paper);
-    var m = L.markers, mk = 0;
+  // Confere se a homografia faz sentido para este formato:
+  // cantos e barra escuros; lugar espelhado da barra e pontas da barra claros.
+  function verify(L, P, S) {
+    var pv = L.paperRef.map(function (pt) { var q = P(pt[0], pt[1]); return S(q[0], q[1]); });
+    var paperV = median(pv);
+    var b = L.orientBar, parts = [];
+    for (var i = 0; i < 3; i++) parts.push(rectDarkness(P, S, { x: b.x + i * b.w / 3, y: b.y, w: b.w / 3, h: b.h }, paperV));
+    var bar = Math.min.apply(null, parts);
+    var anti = rectDarkness(P, S, L.antiBar, paperV);
+    var ends = Math.max.apply(null, L.barEnds.map(function (e) { return rectDarkness(P, S, e, paperV); }));
+    var m = L.markers, M = L.MARKER, mk = 1;
     ['tl', 'tr', 'bl', 'br'].forEach(function (k) {
-      mk += rectDarkness(P, S, { x: m[k].x + 2, y: m[k].y + 2, w: 6, h: 6 }, paper);
+      mk = Math.min(mk, rectDarkness(P, S, { x: m[k].x + 0.2 * M, y: m[k].y + 0.2 * M, w: 0.6 * M, h: 0.6 * M }, paperV));
     });
-    return { bar: bar, markers: mk / 4, ok: bar > 0.35 && mk / 4 > 0.35 };
+    // sombras escurecem o papel em até ~40%: por isso as áreas brancas são julgadas
+    // em comparação com a barra, e não por um valor fixo
+    var ok = bar > 0.35 && mk > 0.35 && anti < 0.5 && ends < 0.5 && bar - Math.max(anti, ends) > 0.4;
+    return { bar: bar, anti: anti, ends: ends, markers: mk, ok: ok, score: bar + mk - anti - ends };
   }
 
   /* ---------- marcadores ---------- */
@@ -232,21 +246,33 @@
     });
     if (cand.length < 4) return { combos: [], scale: d.s, candidates: cand.length, cut: cut };
 
-    var corners = {
-      tl: function (c) { return c.cx + c.cy; },
-      tr: function (c) { return (d.w - c.cx) + c.cy; },
-      bl: function (c) { return c.cx + (d.h - c.cy); },
-      br: function (c) { return (d.w - c.cx) + (d.h - c.cy); }
-    };
-    var lists = {};
-    Object.keys(corners).forEach(function (k) {
-      lists[k] = cand.slice().sort(function (a, b) { return corners[k](a) - corners[k](b); }).slice(0, 4);
-    });
+    cand.forEach(function (c) { c.fill = c.area / ((c.maxx - c.minx + 1) * (c.maxy - c.miny + 1)); });
 
-    var combos = [], expected = (L.markers.bl.cy - L.markers.tl.cy) / (L.markers.tr.cx - L.markers.tl.cx);
-    lists.tl.forEach(function (a) { lists.tr.forEach(function (b) { lists.bl.forEach(function (c) { lists.br.forEach(function (e) {
+    // Monta quartetos de candidatos (um perto de cada canto de uma "caixa").
+    // A caixa pode ser a foto inteira (folha que ocupa a foto) ou o contorno de um grupo
+    // de manchas do mesmo tamanho (mini gabarito pequeno dentro de uma página de prova).
+    var combos = [], vistos = {};
+    function quartetos(lista, bx0, by0, bx1, by1, n) {
+      var corners = {
+        tl: function (c) { return (c.cx - bx0) + (c.cy - by0); },
+        tr: function (c) { return (bx1 - c.cx) + (c.cy - by0); },
+        bl: function (c) { return (c.cx - bx0) + (by1 - c.cy); },
+        br: function (c) { return (bx1 - c.cx) + (by1 - c.cy); }
+      };
+      var lists = {};
+      Object.keys(corners).forEach(function (k) {
+        lists[k] = lista.slice().sort(function (x, y) { return corners[k](x) - corners[k](y); }).slice(0, n);
+      });
+      lists.tl.forEach(function (a) { lists.tr.forEach(function (b) { lists.bl.forEach(function (c) { lists.br.forEach(function (e) {
+        avaliar(a, b, c, e);
+      }); }); }); });
+    }
+    function avaliar(a, b, c, e) {
       var set = [a, b, c, e];
       if (new Set(set).size < 4) return;
+      var key = set.map(function (s) { return s.cx.toFixed(1) + ',' + s.cy.toFixed(1); }).join(';');
+      if (vistos[key]) return;
+      vistos[key] = 1;
       var areas = set.map(function (s) { return s.area; });
       var amin = Math.min.apply(null, areas), amax = Math.max.apply(null, areas);
       if (amax / amin > 4) return;
@@ -258,17 +284,34 @@
         area2 += p.cx * q.cy - q.cx * p.cy;
       }
       var qa = Math.abs(area2) / 2;
-      if (!convex || qa < 0.08 * d.w * d.h) return;
+      if (!convex || qa < 0.01 * d.w * d.h) return;
+      // o quadrilátero precisa ser bem maior que as próprias manchas
+      if (qa < 30 * amax) return;
       var top = Math.hypot(b.cx - a.cx, b.cy - a.cy), bot = Math.hypot(e.cx - c.cx, e.cy - c.cy);
       var lef = Math.hypot(c.cx - a.cx, c.cy - a.cy), rig = Math.hypot(e.cx - b.cx, e.cy - b.cy);
       if (top / bot > 2 || bot / top > 2 || lef / rig > 2 || rig / lef > 2) return;
-      var aspect = ((lef + rig) / 2) / ((top + bot) / 2);
-      var ratio = Math.max(aspect / expected, expected / aspect);
-      var score = (qa / (d.w * d.h)) * Math.exp(-Math.log(ratio) * 3) * (amin / amax);
+      var fill = (a.fill + b.fill + c.fill + e.fill) / 4;
+      // quadrados cheios e do mesmo tamanho valem mais que bolinhas preenchidas ou letras
+      var score = Math.sqrt(qa / (d.w * d.h)) * Math.pow(amin / amax, 1.5) * Math.pow(fill, 6);
       combos.push({ score: score, pts: set.map(function (s) { return [s.cx / d.s, s.cy / d.s]; }) });
-    }); }); }); });
+    }
+
+    quartetos(cand, 0, 0, d.w, d.h, 6);
+    // grupos de manchas de tamanho parecido
+    var porArea = cand.slice().sort(function (x, y) { return y.area - x.area; });
+    var gruposVistos = {};
+    porArea.forEach(function (ref) {
+      var g = porArea.filter(function (c) { return c.area <= ref.area * 1.6 && c.area >= ref.area / 1.6 && c.fill >= 0.6; });
+      if (g.length < 4) return;
+      var gk = g.map(function (c) { return c.cx | 0; }).join(',');
+      if (gruposVistos[gk]) return;
+      gruposVistos[gk] = 1;
+      var bx0 = Math.min.apply(null, g.map(function (c) { return c.cx; })), bx1 = Math.max.apply(null, g.map(function (c) { return c.cx; }));
+      var by0 = Math.min.apply(null, g.map(function (c) { return c.cy; })), by1 = Math.max.apply(null, g.map(function (c) { return c.cy; }));
+      quartetos(g, bx0, by0, bx1, by1, 4);
+    });
     combos.sort(function (x, y) { return y.score - x.score; });
-    return { combos: combos.slice(0, 12), scale: d.s, candidates: cand.length, cut: cut };
+    return { combos: combos.slice(0, 120), scale: d.s, candidates: cand.length, cut: cut };
   }
 
   /* ---------- decisão das bolinhas ---------- */
@@ -278,7 +321,7 @@
     var top = scores[idx[0]], second = scores[idx[1]] || 0;
     var value, doubt = false;
     if (top < TH_MARK) value = null;
-    else if (second >= TH_MARK && second >= MULT_RATIO * top) value = '*';
+    else if (second >= TH_DOUBLE && second >= MULT_RATIO * top) value = '*';
     else value = values[idx[0]];
     if (top >= TH_DOUBT_LO && top < TH_DOUBT_HI) doubt = true;
     if (value !== '*' && second >= TH_DOUBT_LO) doubt = true;
@@ -287,38 +330,57 @@
 
   /* ---------- leitura completa ---------- */
 
-  // gray: tons de cinza da foto; retorna respostas e identificação
-  function read(gray, w, h) {
+  // Tenta casar os 4 cantos achados na foto com cada formato (folha A4, mini horizontal,
+  // mini quadrado) e cada giro da foto. Fica com a combinação que melhor confere.
+  function encaixar(found, layouts, S) {
+    var melhor = null;
+    for (var i = 0; i < found.combos.length; i++) {
+      var p = found.combos[i].pts;           // [tl, tr, bl, br] da foto
+      var poly = [p[0], p[1], p[3], p[2]];   // sentido horário
+      layouts.forEach(function (L) {
+        var m = L.markers;
+        var src = [[m.tl.cx, m.tl.cy], [m.tr.cx, m.tr.cy], [m.br.cx, m.br.cy], [m.bl.cx, m.bl.cy]];
+        var esperado = (m.bl.cy - m.tl.cy) / (m.tr.cx - m.tl.cx);
+        for (var k = 0; k < 4; k++) {
+          var dst = [poly[k % 4], poly[(k + 1) % 4], poly[(k + 2) % 4], poly[(k + 3) % 4]];
+          var wImg = (dist(dst[0], dst[1]) + dist(dst[3], dst[2])) / 2;
+          var hImg = (dist(dst[0], dst[3]) + dist(dst[1], dst[2])) / 2;
+          var razao = (hImg / wImg) / esperado;
+          if (razao > 1.7 || razao < 1 / 1.7) continue;   // formato não combina com a foto
+          var H = homography(src, dst);
+          if (!H) continue;
+          var v = verify(L, H, S);
+          if (v.ok && (!melhor || v.score > melhor.v.score)) melhor = { L: L, P: H, v: v };
+        }
+      });
+      if (melhor && i >= 2) break;   // achou nos primeiros candidatos: não precisa olhar o resto
+    }
+    return melhor;
+  }
+  function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+
+  // gray: tons de cinza da foto; layouts: formatos aceitos (padrão: folha A4).
+  // Retorna respostas, identificação e o formato reconhecido.
+  function read(gray, w, h, layouts) {
+    layouts = layouts && layouts.length ? layouts : [L];
     var S = sampler(gray, w, h);
     var found = findMarkerCombos(gray, w, h);
-    var CUT_MSG = 'Um dos quadrados pretos dos cantos ficou cortado na borda da foto. Afaste um pouco o celular e deixe uma margem em volta da folha.';
+    var CUT_MSG = 'Um dos quadrados pretos dos cantos ficou cortado na borda da foto. Afaste um pouco o celular e deixe uma margem em volta do gabarito.';
     if (!found.combos.length && found.cut) return { ok: false, error: CUT_MSG };
     if (!found.combos.length) {
-      return { ok: false, error: 'Não encontrei os 4 quadrados pretos dos cantos. Fotografe a folha inteira, de cima, com boa luz.' };
+      return { ok: false, error: 'Não encontrei os 4 quadrados pretos dos cantos. Enquadre o gabarito inteiro, de cima, com boa luz.' };
     }
-    var m = L.markers;
-    var src = [[m.tl.cx, m.tl.cy], [m.tr.cx, m.tr.cy], [m.bl.cx, m.bl.cy], [m.br.cx, m.br.cy]];
-    var P = null, check = null;
-    for (var i = 0; i < found.combos.length && !P; i++) {
-      var pts = found.combos[i].pts;
-      // tenta a folha em pé e de cabeça para baixo
-      var tries = [pts, [pts[3], pts[2], pts[1], pts[0]]];
-      for (var t = 0; t < 2; t++) {
-        var H = homography(src, tries[t]);
-        if (!H) continue;
-        var v = verify(H, S);
-        if (v.ok) { P = H; check = v; break; }
-      }
+    var fit = encaixar(found, layouts, S);
+    if (!fit && found.cut) return { ok: false, error: CUT_MSG };
+    if (!fit) {
+      return { ok: false, error: 'Achei manchas escuras, mas não reconheci o gabarito. Confira se ele é desta prova (mesmo número de questões) e se os 4 cantos aparecem na foto.' };
     }
-    if (!P && found.cut) return { ok: false, error: CUT_MSG };
-    if (!P) {
-      return { ok: false, error: 'Achei manchas escuras, mas não reconheci a folha. Confira se é a folha do app e se os 4 cantos aparecem na foto.' };
-    }
+    var P = fit.P, check = fit.v, LY = fit.L;
 
     var answers = {}, scores = {}, doubts = [], points = {};
-    L.order.forEach(function (gname) {
-      var bubbles = L.groups[gname];
-      var sc = bubbles.map(function (b) { return bubbleScore(P, S, b.x, b.y); });
+    LY.order.forEach(function (gname) {
+      var bubbles = LY.groups[gname];
+      var sc = bubbles.map(function (b) { return bubbleScore(P, S, b.x, b.y, LY.BUBBLE_R); });
       var res = decide(sc, bubbles.map(function (b) { return b.value; }));
       answers[gname] = res.value;
       scores[gname] = sc;
@@ -336,7 +398,7 @@
     return {
       ok: true,
       answers: answers, scores: scores, doubts: doubts, points: points,
-      numero: numero, check: check, project: P
+      numero: numero, check: check, project: P, layout: LY
     };
   }
 

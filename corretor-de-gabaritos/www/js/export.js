@@ -165,5 +165,17 @@
     return { blob: blob, nome: 'resultados-' + slug(p.nome) + sufixo + '.xlsx' };
   }
 
-  root.GabExport = { folha: folha, pdfResultados: pdfResultados, planilha: planilha, slug: slug };
+  /* ---------- mini gabarito (para colar dentro da prova) ---------- */
+  // tipo: 'png' (imagem para o Word/Docs) ou 'pdf' (tamanho real, para recortar)
+  function mini(p, formato, tipo) {
+    var nomeFmt = formato === 'mini-q' ? 'quadrado' : 'horizontal';
+    var base = 'mini-gabarito-' + slug(p.nome) + '-' + nomeFmt;
+    if (tipo === 'pdf') {
+      var doc = root.GabMini.pdf(jsPDFCtor(), formato, p.numQ);
+      return Promise.resolve({ blob: doc.output('blob'), nome: base + '.pdf' });
+    }
+    return root.GabMini.png(formato, p.numQ).then(function (blob) { return { blob: blob, nome: base + '.png' }; });
+  }
+
+  root.GabExport = { mini: mini, folha: folha, pdfResultados: pdfResultados, planilha: planilha, slug: slug };
 })(typeof self !== 'undefined' ? self : this);

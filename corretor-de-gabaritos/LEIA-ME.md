@@ -10,6 +10,7 @@ Feito para circular entre professores. Não está na Play Store.
 - Cria provas de 1 a 50 questões (alternativas A a E) com gabarito oficial. O gabarito pode ser marcado na tela ou lido de uma folha preenchida pelo professor.
 - Permite anular questões: o app desconsidera a questão para todos.
 - Gera a folha de respostas em PDF, com o nome da escola e da prova.
+- **Mini gabarito** (novo na versão 1.1): um bloco pequeno, horizontal ou quadrado, para colar dentro da própria prova. O app gera a imagem (PNG, para o Word ou Google Docs) ou um PDF para recortar. Na hora de escanear, o app reconhece sozinho se a foto é da folha A4 ou do mini gabarito.
 - Lê a foto da folha **sem internet**: identifica ano/série (6º ao 9º ano, 1ª a 3ª série), turma (A a E), turno (manhã, tarde, noite), número de chamada e as respostas.
 - Mostra a leitura para conferência antes de salvar, destacando marcações fracas ou duplas.
 - Guarda tudo no celular e monta a lista de resultados **separada por turma**.
@@ -51,6 +52,13 @@ Versões novas instalam por cima da antiga sem apagar os dados, desde que sejam 
 6. Confira a leitura (linhas amarelas pedem atenção) e toque em **Salvar e próxima**.
 7. Veja **Resultados por turma** e **Relatórios**, e envie pelo WhatsApp.
 
+## Como usar o mini gabarito
+
+1. Na prova, toque em **Gerar folhas para imprimir** e escolha **Mini gabarito horizontal** ou **quadrado**.
+2. Escolha **Imagem** e cole no documento da prova, **sem esticar nem achatar**. Deixe um espaço em branco em volta.
+3. O mini gabarito vale para o número de questões daquela prova. Se mudar o número, gere de novo.
+4. Para escanear, aproxime o celular para o gabarito ocupar boa parte da foto, com os 4 quadrados pretos aparecendo.
+
 ## Para quem for mexer no código
 
 | Arquivo | O que faz |
@@ -58,6 +66,7 @@ Versões novas instalam por cima da antiga sem apagar os dados, desde que sejam 
 | `www/js/layout.js` | Medidas da folha em milímetros. A folha impressa e a leitura usam o mesmo arquivo. |
 | `www/js/omr.js` | Leitura da foto: acha os cantos, corrige a perspectiva, mede cada bolinha. |
 | `www/js/sheet-pdf.js` | Desenha a folha de respostas em PDF. |
+| `www/js/mini.js` | Mini gabarito: medidas, desenho em PDF e imagem PNG. |
 | `www/js/store.js` | Guarda provas e resultados no celular. |
 | `www/js/reports.js` | Cálculo dos relatórios. |
 | `www/js/export.js` | PDF e planilha de resultados. |
