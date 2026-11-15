@@ -168,7 +168,7 @@
   /* ---------- mini gabarito (para colar dentro da prova) ---------- */
   // tipo: 'png' (imagem para o Word/Docs) ou 'pdf' (tamanho real, para recortar)
   function mini(p, formato, tipo) {
-    var nomeFmt = formato === 'mini-q' ? 'quadrado' : 'horizontal';
+    var nomeFmt = { 'mini-q': 'quadrado', 'mini-c': 'compacto' }[formato] || 'horizontal';
     var base = 'mini-gabarito-' + slug(p.nome) + '-' + nomeFmt;
     if (tipo === 'pdf') {
       var doc = root.GabMini.pdf(jsPDFCtor(), formato, p.numQ);

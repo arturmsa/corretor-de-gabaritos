@@ -346,10 +346,12 @@
           var wImg = (dist(dst[0], dst[1]) + dist(dst[3], dst[2])) / 2;
           var hImg = (dist(dst[0], dst[3]) + dist(dst[1], dst[2])) / 2;
           var razao = (hImg / wImg) / esperado;
-          if (razao > 1.7 || razao < 1 / 1.7) continue;   // formato não combina com a foto
+          if (razao > 1.5 || razao < 1 / 1.5) continue;   // formato não combina com a foto
           var H = homography(src, dst);
           if (!H) continue;
           var v = verify(L, H, S);
+          // formatos parecidos (quadrado x compacto): desempata pela proporção da foto
+          v.score -= 1.5 * Math.abs(Math.log(razao));
           if (v.ok && (!melhor || v.score > melhor.v.score)) melhor = { L: L, P: H, v: v };
         }
       });

@@ -8,6 +8,8 @@
  * (no Word, Google Docs etc.), em dois formatos:
  *   'mini-h'  faixa horizontal (questões em colunas, A a E de cima para baixo)
  *   'mini-q'  quadrado (questões em linhas, como na folha A4)
+ *   'mini-c'  compacto: só as questões, sem identificação do aluno
+ *             (o aluno escreve o nome na prova e o professor digita o nº no app)
  * O tamanho do bloco muda conforme o número de questões da prova.
  * As medidas estão em milímetros, com origem no canto superior esquerdo do bloco.
  * O mesmo desenho serve para o PDF, para a imagem PNG e para a leitura da foto.
@@ -26,7 +28,8 @@
 
   var FORMATOS = {
     'mini-h': 'Mini gabarito horizontal (faixa)',
-    'mini-q': 'Mini gabarito quadrado'
+    'mini-q': 'Mini gabarito quadrado',
+    'mini-c': 'Mini gabarito compacto (só as questões)'
   };
 
   function base(id, W, H, numQ) {
@@ -105,6 +108,38 @@
     return L;
   }
 
+  /* ---------- compacto (só as questões) ---------- */
+  // Para diferenciar do quadrado, a barra de orientação fica EMBAIXO, à esquerda.
+  function compacto(numQ) {
+    var PER = 20, BAND = 29, qx0 = 15;
+    var bands = Math.ceil(numQ / PER);
+    var W = qx0 + (Math.min(numQ, PER) - 1) * DX + R + 6.1;
+    W = Math.max(W, 60);
+    var H = 45 + (bands - 1) * BAND;
+    var L = base('mini-c', W, H, numQ);
+    L.orientBar = { x: 10, y: H - 4.5, w: 14, h: 3 };
+    L.barEnds = [{ x: 7.2, y: H - 4.5, w: 2.3, h: 3 }, { x: 24.7, y: H - 4.5, w: 2.5, h: 3 }];
+    L.antiBar = { x: W - 24, y: H - 4.5, w: 14, h: 3 };
+    L.paperRef = [];
+    for (var x = 9; x <= W - 9; x += 3) L.paperRef.push([x, 7.4]);
+    for (var b = 0; b < bands; b++) {
+      var dy = b * BAND;
+      LETTERS.forEach(function (l, i) { L.texts.push({ t: l, x: 9.5, y: 14 + dy + i * 5.4 + 0.8, size: 5.5, bold: true, align: 'center' }); });
+      for (var k = 0; k < PER; k++) {
+        var q = b * PER + k + 1;
+        if (q > numQ) break;
+        var x2 = qx0 + k * DX;
+        L.texts.push({ t: String(q), x: x2, y: 10.2 + dy, size: 5.2, bold: true, align: 'center' });
+        var pts = [];
+        for (var i = 0; i < 5; i++) pts.push([x2, 14 + dy + i * 5.4]);
+        addGroup(L, 'q' + q, LETTERS, pts);
+      }
+    }
+    L.titulo = { t: 'GABARITO', x: W / 2, y: 4.6, size: 6.5 };
+    L.credito = { t: 'Prof. Artur', x: (27.5 + W - 24) / 2, y: H - 2, size: 3.6 };
+    return L;
+  }
+
   /* ---------- quadrado ---------- */
   function quadrado(numQ) {
     var COLW = 33, QY0 = 42, QDY = 5.6;
@@ -139,6 +174,7 @@
 
   function layout(formato, numQ) {
     numQ = Math.max(1, Math.min(A4.MAX_Q, numQ || 10));
+    if (formato === 'mini-c') return compacto(numQ);
     return formato === 'mini-q' ? quadrado(numQ) : horizontal(numQ);
   }
 

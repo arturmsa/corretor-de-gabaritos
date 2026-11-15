@@ -69,6 +69,18 @@ questoes(doc, 7, 10, 15, Math.max(y, oyQ + LQ.PAGE.h + 8), 180);
 M.desenhar(LQ, M.penPDF(doc, oxQ, oyQ));
 pos.push({ formato: 'mini-q', ox: oxQ, oy: oyQ, w: LQ.PAGE.w, h: LQ.PAGE.h });
 
+// Página 3: gabarito compacto (só as questões) no canto superior direito
+doc.addPage();
+cabecalho(doc, 'Avaliação de Filosofia · 1º bimestre (compacto)');
+const LC = M.layout('mini-c', numQ);
+const oxC = 195 - LC.PAGE.w, oyC = 49;
+M.desenhar(LC, M.penPDF(doc, oxC, oyC));
+pos.push({ formato: 'mini-c', ox: oxC, oy: oyC, w: LC.PAGE.w, h: LC.PAGE.h });
+doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(90);
+doc.text('Marque suas respostas no gabarito ao lado.', 15, 51); doc.setTextColor(0);
+let y3 = questoes(doc, 0, 2, 15, 59, 195 - LC.PAGE.w - 22);
+questoes(doc, 2, 5, 15, Math.max(y3, oyC + LC.PAGE.h + 8), 180);
+
 fs.writeFileSync(out, Buffer.from(doc.output('arraybuffer')));
-fs.writeFileSync(out.replace(/\.pdf$/, '.json'), JSON.stringify({ numQ, pos, layouts: { 'mini-h': LH, 'mini-q': LQ } }));
+fs.writeFileSync(out.replace(/\.pdf$/, '.json'), JSON.stringify({ numQ, pos, layouts: { 'mini-h': LH, 'mini-q': LQ, 'mini-c': LC } }));
 console.log('ok', out, LH.PAGE, LQ.PAGE);

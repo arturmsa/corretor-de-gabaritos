@@ -23,6 +23,7 @@
 
   // Estado temporário (não salvo)
   var pendente = null;   // folha recém-escaneada, aguardando conferência
+  var ultimaFolha = {};  // por prova: turma e nº da última folha salva (ajuda no mini compacto, que não tem identificação)
   var rascunho = null;   // prova sendo criada/editada
   var relTurma = '';     // turma escolhida nos relatórios ('' = todas)
 
@@ -266,7 +267,7 @@
   // Formatos aceitos na leitura: a folha A4 e os dois mini gabaritos desta prova.
   // O professor pode misturar: o app descobre sozinho qual foi fotografado.
   function formatosDaProva(numQ) {
-    return [L, Mini.layout('mini-h', numQ), Mini.layout('mini-q', numQ)];
+    return [L, Mini.layout('mini-h', numQ), Mini.layout('mini-q', numQ), Mini.layout('mini-c', numQ)];
   }
 
   // Tira a foto e roda a leitura. Devolve o resultado do OMR (ou null se cancelado/erro).
@@ -311,7 +312,7 @@
     ctx.lineWidth = Math.max(2, c2.width / 300);
     var LY = res.layout;
     // raio do círculo de conferência: metade da distância entre duas bolinhas vizinhas na foto
-    var p0 = res.points.serie[0], p1 = res.points.serie[1];
+    var g0 = res.points[LY.order[0]], p0 = g0[0], p1 = g0[1];
     var raio = Math.max(4, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) * s * 0.5);
     LY.order.forEach(function (g) {
       var v = res.answers[g], duv = res.doubts.indexOf(g) >= 0;
@@ -340,9 +341,21 @@
         doubts: res.doubts.filter(function (g) { return !/^q\d+$/.test(g) || +g.slice(1) <= p.numQ; }),
         preview: res.preview
       };
-      // grupos de identificação vazios ou duplos também precisam de atenção
-      ['serie', 'turma', 'turno'].forEach(function (g) { if (!pendente.r[g] && pendente.doubts.indexOf(g) < 0) pendente.doubts.push(g); });
-      if (pendente.r.numero == null) pendente.doubts.push('numero');
+      if (res.layout.id === 'mini-c') {
+        // mini compacto não tem identificação: repete a turma da folha anterior e sugere o próximo nº
+        var ult = ultimaFolha[p.id];
+        if (ult) {
+          pendente.r.serie = ult.serie; pendente.r.turma = ult.turma; pendente.r.turno = ult.turno;
+          if (ult.numero != null) pendente.r.numero = ult.numero + 1;
+        }
+        pendente.semId = true;
+        pendente.doubts.push('numero');
+        if (!ult) ['serie', 'turma', 'turno'].forEach(function (g) { pendente.doubts.push(g); });
+      } else {
+        // grupos de identificação vazios ou duplos também precisam de atenção
+        ['serie', 'turma', 'turno'].forEach(function (g) { if (!pendente.r[g] && pendente.doubts.indexOf(g) < 0) pendente.doubts.push(g); });
+        if (pendente.r.numero == null) pendente.doubts.push('numero');
+      }
       if (location.hash === '#/p/' + p.id + '/revisao') render(); else go('/p/' + p.id + '/revisao');
     });
   }
@@ -378,6 +391,8 @@
     var duvQ = doubts.filter(function (g) { return /^q\d+$/.test(g); }).map(function (g) { return +g.slice(1); });
     var html = '<div class="card" id="placar">' + placar() + '</div>';
     if (duvQ.length) html += '<div class="alert">Confira as questões ' + duvQ.join(', ') + ' (marcação fraca ou dupla). Elas estão destacadas.</div>';
+    var semId = nova && pendente.semId;
+    if (semId) html += '<div class="alert">Gabarito compacto, sem identificação: confira a turma e digite o <b>nº de chamada</b> do aluno (veja o nome na prova).</div>';
 
     html += '<h3>Aluno</h3><div class="card"><div class="idgrid">' +
       '<label class="field' + cls('serie') + '">Ano/Série<select id="iSerie">' + opcoes(L.SERIES, L.SERIES_NOME, r.serie) + '</select></label>' +
@@ -410,6 +425,7 @@
       document.getElementById('placar').innerHTML = placar();
     }
     desenharGrade();
+    if (semId) { var $n = document.getElementById('iNum'); $n.focus(); $n.select(); }
     document.getElementById('gradeResp').onclick = function (e) {
       var b = e.target.closest('button[data-l]'); if (!b) return;
       var q = +b.dataset.q;
@@ -439,6 +455,7 @@
         if (!Store.salvarResultado(p, r)) { aviso('Memória cheia', 'Não consegui salvar. Faça uma cópia de segurança e apague provas antigas.'); return; }
         var c = Store.corrigir(p, r);
         toast('Salvo: nº ' + r.numero + ' · ' + c.acertos + '/' + c.total);
+        ultimaFolha[p.id] = { serie: r.serie, turma: r.turma, turno: r.turno, numero: r.numero };
         pendente = null;
         if (proxima) escanear(p); else go(nova ? '/p/' + p.id + '/resultados' : '/p/' + p.id + '/resultados');
       });
@@ -568,7 +585,8 @@
     var opcoes = '<fieldset class="formatos"><legend>Formato</legend>' +
       '<label class="radio"><input type="radio" name="fmt" value="folha" checked><span><b>Folha A4 completa</b><br><span class="small muted">Uma folha de respostas separada da prova.</span></span></label>' +
       (p ? '<label class="radio"><input type="radio" name="fmt" value="mini-h"><span><b>Mini gabarito horizontal</b><br><span class="small muted">Faixa para colar no topo ou no fim da prova.</span></span></label>' +
-           '<label class="radio"><input type="radio" name="fmt" value="mini-q"><span><b>Mini gabarito quadrado</b><br><span class="small muted">Bloco para colar num canto da prova.</span></span></label>' : '') +
+           '<label class="radio"><input type="radio" name="fmt" value="mini-q"><span><b>Mini gabarito quadrado</b><br><span class="small muted">Bloco para colar num canto da prova.</span></span></label>' +
+           '<label class="radio"><input type="radio" name="fmt" value="mini-c"><span><b>Mini gabarito compacto</b><br><span class="small muted">Só as questões, o menor de todos. O aluno escreve o nome na prova e você digita o nº de chamada ao escanear.</span></span></label>' : '') +
       '</fieldset>';
     dialogo('<h2>' + (p ? 'Gabarito para imprimir' : 'Folha em branco') + '</h2>' +
       (escola ? '' : '<div class="alert">O nome da escola ainda não foi definido (menu ⋮ › Nome da escola).</div>') +

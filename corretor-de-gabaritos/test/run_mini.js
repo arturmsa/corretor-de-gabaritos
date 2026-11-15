@@ -1,7 +1,7 @@
 // Lê as fotos simuladas do mini gabarito oferecendo os 3 formatos ao leitor
 const fs=require('fs'), OMR=require('../www/js/omr.js'), L=require('../www/js/layout.js'), M=require('../www/js/mini.js');
 const nq=JSON.parse(fs.readFileSync('exemplo-prova.json')).numQ;
-const layouts=[L, M.layout('mini-h',nq), M.layout('mini-q',nq)];
+const layouts=[L, M.layout('mini-h',nq), M.layout('mini-q',nq), M.layout('mini-c',nq)];
 let tq=0,eq=0,ei=0,fails=0,fmt=0,du=0; const files=fs.readdirSync('.').filter(f=>/^mfoto_\d+\.json$/.test(f)).sort((a,b)=>parseInt(a.slice(6))-parseInt(b.slice(6)));
 for(const f of files){const m=JSON.parse(fs.readFileSync(f)), raw=fs.readFileSync(f.replace('.json','.raw'));
  const t0=Date.now(); const r=OMR.read(new Uint8ClampedArray(raw),m.w,m.h,layouts); const ms=Date.now()-t0;

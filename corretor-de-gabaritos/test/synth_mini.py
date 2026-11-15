@@ -6,7 +6,7 @@ modo=sys.argv[3] if len(sys.argv)>3 else 'mix'; dificil=len(sys.argv)>4
 info=json.load(open('exemplo-prova.json'))
 DPI=150; pxmm=DPI/25.4
 subprocess.run(['pdftoppm','-r',str(DPI),'-png','exemplo-prova.pdf','pg'],check=True)
-pages=[cv2.imread('pg-1.png'),cv2.imread('pg-2.png')]
+pages=[cv2.imread('pg-%d.png'%(i+1)) for i in range(len(info['pos']))]
 nq=info['numQ']
 def fill(img,X,Y,r,kind):
     color=random.choice([(120,40,20),(40,40,40),(90,60,50)] + ([(150,150,150),(130,130,135)] if dificil else []))
@@ -17,14 +17,15 @@ def fill(img,X,Y,r,kind):
             a=random.uniform(0,6.28); b=a+random.uniform(2,3.5)
             cv2.line(img,(int(cx+R*.8*np.cos(a)),int(cy+R*.8*np.sin(a))),(int(cx+R*.8*np.cos(b)),int(cy+R*.8*np.sin(b))),color,max(2,int(pxmm*0.8)),cv2.LINE_AA)
 for idx in range(N):
-    pi=idx%2; P=info['pos'][pi]; L=info['layouts'][P['formato']]; img=pages[pi].copy(); exp={'formato':P['formato']}
+    pi=idx%len(info['pos']); P=info['pos'][pi]; L=info['layouts'][P['formato']]; img=pages[pi].copy(); exp={'formato':P['formato']}
     G=L['groups']; ox,oy=P['ox'],P['oy']; R=L['BUBBLE_R']
     def pick(g):
         i=random.randrange(len(G[g])); b=G[g][i]; fill(img,ox+b['x'],oy+b['y'],R,'full'); return b['value']
-    for g in ['serie','turma','turno']: exp[g]=pick(g)
-    num=random.randint(1,45)
-    for g,dg in [('dezena',num//10),('unidade',num%10)]:
-        b=G[g][dg]; fill(img,ox+b['x'],oy+b['y'],R,'full'); exp[g]=str(dg)
+    if 'serie' in G:
+        for g in ['serie','turma','turno']: exp[g]=pick(g)
+        num=random.randint(1,45)
+        for g,dg in [('dezena',num//10),('unidade',num%10)]:
+            b=G[g][dg]; fill(img,ox+b['x'],oy+b['y'],R,'full'); exp[g]=str(dg)
     for q in range(1,nq+1):
         r=random.random(); g='q%d'%q
         if r<0.05: exp[g]=None; continue
